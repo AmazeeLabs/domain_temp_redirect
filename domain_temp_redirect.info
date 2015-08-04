@@ -1,0 +1,4 @@
+name = Domain Temporary Redirect
+description = Temporary redirects dthe traffic from one or more domains to another one.
+core = 7.x
+dependencies[] = domain

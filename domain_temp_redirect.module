@@ -1,0 +1,102 @@
+<?php
+
+/**
+ * Temporary redirects the traffic from one or more domains to another one.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function domain_temp_redirect_permission() {
+  return array(
+    'administer domain temp redirect' => array(
+      'title' => t('Administer domain temporary redirect'),
+    ),
+    'access temporary disabled domains' => array(
+      'title' => t('Access temporary disabled domains'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_init().
+ */
+function domain_temp_redirect_init() {
+  if ($target_domain = _domain_temp_redirect_is_redirect_case()) {
+    $current_path = current_path();
+    $options = array('query' => drupal_get_query_parameters());
+    $path = $target_domain['path'] . $current_path;
+    drupal_goto($path, $options);
+  }
+}
+
+/**
+ * Implements hook_process_HOOK().
+ */
+function domain_temp_redirect_process_domain_locale_all_languages(&$variables) {
+  // We need to alter the links which are displayed by the domain_locale module
+  // in the domain_locale_all_languages content pane.
+  foreach ($variables['domains'] as $domain_key => $values) {
+    if (_domain_temp_redirect_is_redirect_case($values['domain_id'])) {
+      unset($variables['domains'][$domain_key]);
+    }
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function domain_temp_redirect_menu() {
+  $items = array();
+  $items['admin/structure/domain/domain-redirect'] = array(
+    'title' => 'Domain temporary redirect',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('domain_temp_redirect_config_form'),
+    'access arguments' => array('administer domain temp redirect'),
+    'weight' => 10,
+    'file' => 'domain_temp_redirect.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  return $items;
+}
+
+/**
+ * Detects redirect case.
+ *
+ * @param int|null $domain_id
+ *   Domain to check. If omitted, the current domain will be used.
+ *
+ * @return array|null
+ *   The target domain if redirect case, NULL otherwise.
+ */
+function _domain_temp_redirect_is_redirect_case($domain_id = NULL) {
+  if ($domain_id === NULL) {
+    global $_domain;
+    $domain_id = $_domain['domain_id'];
+  }
+  if (
+    // Detect if current domain should trigger redirect.
+    in_array($domain_id, _domain_temp_redirect_get_temporary_disabled_domains())
+    // Ensure common request.
+    && (!isset($_SERVER['REQUEST_METHOD']) || in_array($_SERVER['REQUEST_METHOD'], array('GET', 'HEAD')))
+    && (!isset($_SERVER['HTTP_X_REQUESTED_WITH']) || strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) != 'xmlhttprequest')
+    // Ensure target domain.
+    && ($domains = domain_domains())
+    && ($target_domain = variable_get('domain_temp_redirect_target_domain'))
+    && (isset($domains[$target_domain]))
+    // Ensure that user has to be redirected.
+    && !user_access('access temporary disabled domains')
+  ) {
+    return $domains[$target_domain];
+  }
+  return NULL;
+}
+
+/**
+ * Returns the list of domain ids to redirect from.
+ *
+ * @return array
+ */
+function _domain_temp_redirect_get_temporary_disabled_domains() {
+  return array_filter(variable_get('domain_temp_redirect_disabled_domains', array()));
+}
